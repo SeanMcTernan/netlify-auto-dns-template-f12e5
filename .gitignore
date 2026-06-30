@@ -1,0 +1,14 @@
+# dependencies
+node_modules/
+
+# secrets / local config
+.env
+.env.*
+!.env.example
+
+# netlify
+.netlify/
+
+# build output
+dist/
+*.log

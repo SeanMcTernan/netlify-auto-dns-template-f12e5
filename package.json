@@ -1,0 +1,19 @@
+{
+  "name": "netlify-auto-dns-template",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Scheduled Netlify function that auto-assigns custom domains to new sites on a team.",
+  "scripts": {
+    "dev": "netlify dev",
+    "deploy": "netlify deploy --prod"
+  },
+  "dependencies": {
+    "@netlify/functions": "^2.8.0",
+    "@netlify/neon": "^0.1.0"
+  },
+  "devDependencies": {
+    "netlify-cli": "^17.0.0",
+    "typescript": "^5.4.0"
+  }
+}

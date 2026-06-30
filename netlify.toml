@@ -1,0 +1,8 @@
+[build]
+  functions = "netlify/functions"
+
+[functions]
+  node_bundler = "esbuild"
+
+# The schedule is declared in netlify/functions/sync-dns.mts via `export const config`.
+# It runs every minute for testing — change it there before going to production.
