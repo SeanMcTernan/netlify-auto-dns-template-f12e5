@@ -65,11 +65,15 @@ export class NetlifyApi {
     return (await res.json()) as DnsZone[];
   }
 
-  /** PATCH /sites/{id} — assign the custom domain (updateSite, body siteSetup). */
+  /** PATCH /sites/{id} — assign the custom domain (updateSite, body siteSetup).
+   *  Do NOT send force_ssl here: a brand-new custom domain has no certificate yet,
+   *  and forcing SSL before one is provisioned returns 422 "Provision a certificate
+   *  before forcing SSL". Netlify provisions the cert asynchronously once the domain
+   *  and DNS are set; force-SSL is a later, separate step. */
   async setCustomDomain(siteId: string, customDomain: string): Promise<void> {
     await this.request(`/sites/${siteId}`, {
       method: "PATCH",
-      body: JSON.stringify({ custom_domain: customDomain, force_ssl: true }),
+      body: JSON.stringify({ custom_domain: customDomain }),
     });
   }
 
