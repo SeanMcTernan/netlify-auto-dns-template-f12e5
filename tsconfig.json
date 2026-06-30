@@ -10,5 +10,5 @@
     "esModuleInterop": true,
     "types": ["@netlify/functions"]
   },
-  "include": ["netlify/functions/**/*.mts", "lib/**/*.ts"]
+  "include": ["netlify/functions/**/*.mts", "lib/**/*.ts", "db/**/*.ts"]
 }

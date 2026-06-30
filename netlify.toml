@@ -4,5 +4,13 @@
 [functions]
   node_bundler = "esbuild"
 
+# One-click "Deploy to Netlify" prompts the customer for exactly these three
+# variables — nothing else. The database is provisioned and connected
+# automatically by Netlify DB on deploy; there is no DB URL to set.
+[template.environment]
+  NETLIFY_API_TOKEN    = "Personal access token with access to your team and its DNS zone (User settings → OAuth → Personal access tokens)"
+  NETLIFY_ACCOUNT_SLUG = "Your team slug, from the team URL app.netlify.com/teams/<slug>"
+  BASE_DOMAIN          = "Domain new sites are placed under, e.g. getnetlify.com — must be a Netlify-managed DNS zone"
+
 # The schedule is declared in netlify/functions/sync-dns.mts via `export const config`.
 # It runs every minute for testing — change it there before going to production.
