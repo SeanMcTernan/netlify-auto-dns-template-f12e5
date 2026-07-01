@@ -27,11 +27,12 @@ there is no connection string to manage and nothing else to set.
 A scheduled Netlify Function runs on a cron and:
 
 1. Lists every site on the team — `GET /{slug}/sites` (paginated; no `/accounts/` prefix).
-2. Diffs against the `processed_sites` table (Netlify DB) to find sites it hasn't seen.
-3. For each new site: `PATCH /sites/{id}` to set `custom_domain = {site.name}.{BASE_DOMAIN}`, then `PUT /sites/{id}/dns` to create the DNS records.
-4. Records the result so each site is handled once.
+2. Diffs against the `processed_sites` table (Netlify DB): finds **new** sites, and **renamed** sites (ones it previously assigned whose current name no longer maps to the stored domain).
+3. New site → `PATCH /sites/{id}` to set `custom_domain = {site.name}.{BASE_DOMAIN}`, then `PUT /sites/{id}/dns` to create the records.
+4. Renamed site → move the custom domain to `{new name}.{BASE_DOMAIN}`, re-wire DNS, and delete the stale old records (`GET`/`DELETE /dns_zones/{zone}/dns_records`).
+5. Records the result so each change is handled once.
 
-There is no "site created" webhook in the Netlify API, so detection is poll-and-diff.
+There is no "site created/renamed" webhook in the Netlify API, so detection is poll-and-diff — a rename is simply "the site's current name no longer matches the domain we stored." Only domains the tool assigned are kept in sync; pre-existing/manually-set domains are never touched.
 
 ## Prerequisite
 

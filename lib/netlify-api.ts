@@ -19,6 +19,12 @@ export interface DnsZone {
   account_slug?: string;
 }
 
+export interface DnsRecord {
+  id: string;
+  hostname: string;
+  type: string;
+}
+
 export class NetlifyApi {
   constructor(private readonly token: string) {}
 
@@ -81,5 +87,29 @@ export class NetlifyApi {
    *  records in the managed zone for the site's custom domain. */
   async configureDns(siteId: string): Promise<void> {
     await this.request(`/sites/${siteId}/dns`, { method: "PUT" });
+  }
+
+  /** GET /dns_zones/{zone_id}/dns_records — all records in a zone. */
+  async listDnsRecords(zoneId: string): Promise<DnsRecord[]> {
+    const res = await this.request(`/dns_zones/${zoneId}/dns_records`);
+    return (await res.json()) as DnsRecord[];
+  }
+
+  /** DELETE /dns_zones/{zone_id}/dns_records/{id} — remove one record. */
+  async deleteDnsRecord(zoneId: string, recordId: string): Promise<void> {
+    await this.request(`/dns_zones/${zoneId}/dns_records/${recordId}`, {
+      method: "DELETE",
+    });
+  }
+
+  /** Delete every record in the zone whose hostname matches `hostname`
+   *  (a custom domain maps to multiple records, e.g. NETLIFY + NETLIFYv6). */
+  async deleteRecordsForHostname(zoneId: string, hostname: string): Promise<number> {
+    const records = await this.listDnsRecords(zoneId);
+    const matches = records.filter((r) => r.hostname === hostname);
+    for (const r of matches) {
+      await this.deleteDnsRecord(zoneId, r.id);
+    }
+    return matches.length;
   }
 }
