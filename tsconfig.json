@@ -3,12 +3,22 @@
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "Bundler",
-    "lib": ["ES2022", "DOM"],
+    "lib": [
+      "ES2022",
+      "DOM"
+    ],
     "strict": true,
     "noEmit": true,
     "skipLibCheck": true,
     "esModuleInterop": true,
-    "types": ["@netlify/functions"]
+    "types": [
+      "@netlify/functions",
+      "node"
+    ]
   },
-  "include": ["netlify/functions/**/*.mts", "lib/**/*.ts", "db/**/*.ts"]
+  "include": [
+    "netlify/functions/**/*.mts",
+    "lib/**/*.ts",
+    "db/**/*.ts"
+  ]
 }

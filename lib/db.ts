@@ -12,6 +12,8 @@ export interface ProcessedRecord {
   name: string;
   customDomain: string | null;
   action: SiteAction;
+  redirectDeployId: string | null;
+  redirectState: string | null;
 }
 
 /** Has the initial seed pass run? Lets a zero-site team leave first-run mode. */
@@ -33,14 +35,27 @@ export async function getProcessed(): Promise<Map<string, ProcessedRecord>> {
       name: processedSites.name,
       customDomain: processedSites.customDomain,
       action: processedSites.action,
+      redirectDeployId: processedSites.redirectDeployId,
+      redirectState: processedSites.redirectState,
     })
     .from(processedSites);
   return new Map(
-    rows.map((r) => [r.siteId, { name: r.name, customDomain: r.customDomain, action: r.action as SiteAction }]),
+    rows.map((r) => [
+      r.siteId,
+      {
+        name: r.name,
+        customDomain: r.customDomain,
+        action: r.action as SiteAction,
+        redirectDeployId: r.redirectDeployId,
+        redirectState: r.redirectState,
+      },
+    ]),
   );
 }
 
-/** Insert a site's record, or update it in place (used for rename re-sync). */
+/** Insert a site's record, or update it in place (used for rename re-sync).
+ *  Resets redirect state on update so a renamed site gets re-injected with a
+ *  rule pointing at its new domain. */
 export async function markProcessed(
   siteId: string,
   name: string,
@@ -52,6 +67,25 @@ export async function markProcessed(
     .values({ siteId, name, customDomain, action })
     .onConflictDoUpdate({
       target: processedSites.siteId,
-      set: { name, customDomain, action, processedAt: new Date() },
+      set: {
+        name,
+        customDomain,
+        action,
+        processedAt: new Date(),
+        redirectDeployId: null,
+        redirectState: null,
+      },
     });
+}
+
+/** Record the outcome of redirect enforcement for a site's published deploy. */
+export async function markRedirect(
+  siteId: string,
+  state: "injected" | "skipped_functions",
+  deployId: string,
+): Promise<void> {
+  await db
+    .update(processedSites)
+    .set({ redirectState: state, redirectDeployId: deployId })
+    .where(eq(processedSites.siteId, siteId));
 }

@@ -11,6 +11,16 @@ export interface NetlifySite {
   url?: string;
   default_domain?: string;
   account_slug?: string;
+  published_deploy?: {
+    id: string;
+    available_functions?: unknown[];
+  } | null;
+}
+
+export interface SiteFile {
+  path: string; // leading slash, e.g. "/index.html"
+  sha: string;
+  size: number;
 }
 
 export interface DnsZone {
@@ -111,5 +121,60 @@ export class NetlifyApi {
       await this.deleteDnsRecord(zoneId, r.id);
     }
     return matches.length;
+  }
+
+  /** GET /sites/{id}/files — every file in the published deploy, with SHA1s. */
+  async listSiteFiles(siteId: string): Promise<SiteFile[]> {
+    const res = await this.request(`/sites/${siteId}/files`);
+    return (await res.json()) as SiteFile[];
+  }
+
+  /** GET /sites/{id}/files/{path} with the raw Accept header — file content,
+   *  or null if the file doesn't exist in the published deploy. */
+  async getFileRaw(siteId: string, path: string): Promise<string | null> {
+    const clean = path.replace(/^\//, "");
+    const res = await fetch(`${BASE}/sites/${siteId}/files/${clean}`, {
+      headers: {
+        Authorization: `Bearer ${this.token}`,
+        Accept: "application/vnd.bitballoon.v1.raw",
+      },
+    });
+    if (res.status === 404) return null;
+    if (!res.ok) {
+      throw new Error(`Netlify API GET file ${path} failed: ${res.status} ${res.statusText}`);
+    }
+    return res.text();
+  }
+
+  /** POST /sites/{id}/deploys — create a file-digest deploy. Netlify reuses
+   *  every blob it already has; `required` lists the SHAs we must upload. */
+  async createFileDeploy(
+    siteId: string,
+    files: Record<string, string>, // "/path" -> sha1
+    title: string,
+  ): Promise<{ id: string; required: string[] }> {
+    const res = await this.request(`/sites/${siteId}/deploys`, {
+      method: "POST",
+      body: JSON.stringify({ files, title }),
+    });
+    const deploy = (await res.json()) as { id: string; required?: string[] };
+    return { id: deploy.id, required: deploy.required ?? [] };
+  }
+
+  /** PUT /deploys/{id}/files/{path} — upload one file's content for a pending deploy. */
+  async uploadDeployFile(deployId: string, path: string, content: string): Promise<void> {
+    const clean = path.replace(/^\//, "");
+    const res = await fetch(`${BASE}/deploys/${deployId}/files/${clean}`, {
+      method: "PUT",
+      headers: {
+        Authorization: `Bearer ${this.token}`,
+        "Content-Type": "application/octet-stream",
+      },
+      body: content,
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new Error(`Netlify API upload ${path} failed: ${res.status} ${body}`);
+    }
   }
 }

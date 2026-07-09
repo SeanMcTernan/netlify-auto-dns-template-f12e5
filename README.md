@@ -22,6 +22,11 @@ The deploy flow prompts for **exactly three** environment variables:
 The **database is provisioned and connected automatically** by Netlify DB on deploy —
 there is no connection string to manage and nothing else to set.
 
+Optional (has a sensible default): `MAX_SITE_AGE_MINUTES` (default `1440`). An unseen
+site **older** than this window was created while the tool was down — it gets seeded as
+already-handled instead of retroactively domain-ified. Prevents surprise mass-assignment
+after an outage or an expired token.
+
 ## How it works
 
 A scheduled Netlify Function runs on a cron and:
@@ -30,7 +35,8 @@ A scheduled Netlify Function runs on a cron and:
 2. Diffs against the `processed_sites` table (Netlify DB): finds **new** sites, and **renamed** sites (ones it previously assigned whose current name no longer maps to the stored domain).
 3. New site → `PATCH /sites/{id}` to set `custom_domain = {site.name}.{BASE_DOMAIN}`, then `PUT /sites/{id}/dns` to create the records.
 4. Renamed site → move the custom domain to `{new name}.{BASE_DOMAIN}`, re-wire DNS, and delete the stale old records (`GET`/`DELETE /dns_zones/{zone}/dns_records`).
-5. Records the result so each change is handled once.
+5. **Redirect enforcement** → injects a `_redirects` rule so `{name}.netlify.app` force-301s to the custom domain. Done via an incremental file-digest deploy (`GET /sites/{id}/files` → `POST /sites/{id}/deploys` → upload just the one file). Re-applied automatically whenever the site publishes a new deploy without the rule. **Sites with serverless functions are skipped** (a static file-digest deploy would drop their functions) and logged. Existing `_redirects` files are merged, not overwritten.
+6. Records the result so each change is handled once.
 
 There is no "site created/renamed" webhook in the Netlify API, so detection is poll-and-diff — a rename is simply "the site's current name no longer matches the domain we stored." Only domains the tool assigned are kept in sync; pre-existing/manually-set domains are never touched.
 
