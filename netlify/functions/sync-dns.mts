@@ -12,7 +12,8 @@
 
 import { createHash } from "node:crypto";
 import type { Config } from "@netlify/functions";
-import { NetlifyApi, type NetlifySite } from "../../lib/netlify-api";
+import { NetlifyApi } from "../../lib/netlify-api";
+import { classifySites, deriveDomain, pickZone } from "../../lib/plan";
 import { buildRedirects } from "../../lib/redirects";
 import {
   getProcessed,
@@ -39,13 +40,7 @@ export default async (): Promise<void> => {
   const api = new NetlifyApi(token);
 
   // Precondition: the base domain must be covered by a Netlify-managed DNS zone.
-  // Pick the MOST SPECIFIC matching zone (e.g. staging.example.com over
-  // example.com) — that's where Netlify actually materialises the records, so
-  // rename cleanup must look there too.
-  const zones = await api.listDnsZones();
-  const zone = zones
-    .filter((z) => baseDomain === z.name || baseDomain.endsWith(`.${z.name}`))
-    .sort((a, b) => b.name.length - a.name.length)[0];
+  const zone = pickZone(await api.listDnsZones(), baseDomain);
   if (!zone) {
     throw new Error(
       `No Netlify-managed DNS zone covers "${baseDomain}". Delegate the domain to Netlify DNS before running this.`,
@@ -67,27 +62,20 @@ export default async (): Promise<void> => {
 
   const processed = await getProcessed();
 
-  const unseen = sites.filter((s) => !processed.has(s.id));
-  const newSites: NetlifySite[] = [];
-  for (const site of unseen) {
-    const ageMinutes = (Date.now() - Date.parse(site.created_at)) / 60_000;
-    if (ageMinutes > maxAgeMinutes) {
-      // Created during downtime — too old to auto-domain. Seed it instead.
-      await markProcessed(site.id, site.name, site.custom_domain ?? null, "seeded");
-      console.log(
-        `Seeded stale-unseen site "${site.name}" (${Math.round(ageMinutes)}m old > ${maxAgeMinutes}m window).`,
-      );
-      continue;
-    }
-    newSites.push(site);
+  const { newSites, staleUnseen, renamed: renamedSites } = classifySites({
+    sites,
+    processed,
+    baseDomain,
+    maxAgeMinutes,
+    now: Date.now(),
+  });
+
+  // Sites created during downtime — too old to auto-domain. Seed them instead.
+  for (const site of staleUnseen) {
+    await markProcessed(site.id, site.name, site.custom_domain ?? null, "seeded");
+    console.log(`Seeded stale-unseen site "${site.name}" (older than ${maxAgeMinutes}m window).`);
   }
 
-  // A rename only concerns sites WE assigned: current name no longer maps to the
-  // domain we recorded. We never touch 'seeded' or 'skipped_existing_domain' sites.
-  const renamedSites = sites.filter((s) => {
-    const rec = processed.get(s.id);
-    return rec?.action === "assigned" && `${s.name}.${baseDomain}` !== rec.customDomain;
-  });
   console.log(`Discovered ${newSites.length} new site(s), ${renamedSites.length} renamed site(s).`);
 
   for (const site of newSites) {
@@ -98,7 +86,7 @@ export default async (): Promise<void> => {
         console.log(`Skip "${site.name}": already has custom domain ${site.custom_domain}`);
         continue;
       }
-      const customDomain = `${site.name}.${baseDomain}`;
+      const customDomain = deriveDomain(site.name, baseDomain);
       await api.setCustomDomain(site.id, customDomain);
       await api.configureDns(site.id);
       await markProcessed(site.id, site.name, customDomain, "assigned");
@@ -111,7 +99,7 @@ export default async (): Promise<void> => {
 
   for (const site of renamedSites) {
     const oldDomain = processed.get(site.id)!.customDomain;
-    const desired = `${site.name}.${baseDomain}`;
+    const desired = deriveDomain(site.name, baseDomain);
     try {
       await api.setCustomDomain(site.id, desired);
       await api.configureDns(site.id);
@@ -192,7 +180,8 @@ export default async (): Promise<void> => {
   }
 };
 
-// Runs every minute for TESTING. For production, dial this back (e.g. "*/15 * * * *").
+// Production default: every 15 minutes. For rapid testing, set "* * * * *"
+// (every minute — Netlify's minimum interval) and redeploy.
 export const config: Config = {
-  schedule: "* * * * *",
+  schedule: "*/15 * * * *",
 };
